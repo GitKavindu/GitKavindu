@@ -1,0 +1,48 @@
+# .github/workflows/macos-iso.yml
+name: Build macOS ISO
+
+on:
+workflow_dispatch:
+
+jobs:
+build-iso:
+  runs-on: macos-latest
+  timeout-minutes: 120
+
+  steps:
+    - name: Checkout (needed to store artifact)
+      uses: actions/checkout@v4
+
+    - name: Show macOS info
+      run: |
+        sw_vers
+        softwareupdate --list-full-installers || true
+
+    - name: Download macOS installer (replace <VERSION> or remove flag to get latest)
+      run: |
+        # Replace <VERSION> with the full installer version you want, e.g. 14.0
+        # You can omit --full-installer-version to get the latest available
+        sudo softwareupdate --fetch-full-installer --full-installer-version 14.0 || sudo softwareupdate --fetch-full-installer
+
+    - name: Create temp DMG
+      run: |
+        # create 16GB dmg
+        hdiutil create -o /tmp/macos_installer -size 16g -layout SPUD -fs HFS+J
+        hdiutil attach /tmp/macos_installer.dmg -mountpoint /Volumes/install_build
+
+    - name: Run createinstallmedia
+      run: |
+        sudo /Applications/Install\ macOS*.app/Contents/Resources/createinstallmedia --volume /Volumes/install_build --nointeraction
+
+    - name: Detach and convert to ISO
+      run: |
+        hdiutil detach /Volumes/Install\ macOS* || true
+        hdiutil convert /tmp/macos_installer.dmg -format UDTO -o /tmp/macos_installer
+        mv /tmp/macos_installer.cdr /tmp/macos_installer.iso
+        ls -lh /tmp/macos_installer.iso
+
+    - name: Upload ISO as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-installer-iso
+        path: /tmp/macos_installer.iso
